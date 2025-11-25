@@ -35,7 +35,7 @@ Options:
 Exit status:
   0     if OK,
   1     if the syntax is not followed,
-  2     if GROUPNAME|GID does not exist or is not a regular group.
+  2     if GROUP does not exist or is not a regular group.
 EOF
 }
 
