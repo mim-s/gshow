@@ -1,0 +1,248 @@
+#!/usr/bin/env bash
+
+# Future me attention:
+#   There are exactly 4 global variables and they are in capitals:
+#   VERBOSE_OPT, ID_OPT, DELIMITER, GID_PRIMARY_USERS
+#   GID_PRIMARY_USERS is only used in print_primary_users().
+#
+#   usage() and error() are only called in main().
+
+
+usage() {
+  cat << 'EOF'
+Usage: gshow [OPTION]... [GROUP]
+Show information about regular groups.
+
+GROUP may be a group name or GID.
+
+With no GROUP, output all regular groups.
+
+With GROUP, output exactly two lines:
+  1. users whose primary group is GROUP
+  2. users with GROUP as a supplementary group
+
+Options:
+  -v, --verbose            show all regular groups in verbose format
+  -e, --empty              show regular groups with no members
+  -p, --primary            show users whose primary group is GROUP
+                           no output if there are none
+  -s, --supplementary      show users with GROUP as a supplementary group
+                           no output if there are none
+  -i, --id                 print IDs instead of names
+  -d, --delimiter=DELIM    set output delimiter (default: space)
+      --help               display this help and exit
+
+Exit status:
+  0     if OK,
+  1     if the syntax is not followed,
+  2     if GROUPNAME|GID does not exist or is not a regular group.
+EOF
+}
+
+error() {
+  local status="$1" msg="$2"
+  local default_msg="gshow: invalid syntax.\nTry 'gshow --help' for more information.\n"
+
+  printf '%b' "${msg:-$default_msg}" >&2
+  exit "$status"
+}
+
+get_min_max_gid() {
+  local mingid maxgid key value
+  while read -r key value _; do
+    case "$key" in
+      GID_MIN) mingid="$value" ;;
+      GID_MAX) maxgid="$value" ;;
+    esac
+  done 2>/dev/null < '/etc/login.defs'
+
+  mingid="${mingid:-1000}"
+  maxgid="${maxgid:-60000}"
+
+  printf '%s %s\n' "$mingid" "$maxgid"
+}
+
+generate_regular_group_lines() {
+  local mingid maxgid name x gid supps
+  read -r mingid maxgid < <(get_min_max_gid)
+
+  while IFS=':' read -r name x gid supps; do
+    (( gid < mingid || gid > maxgid )) && continue
+    printf '%s:%s:%s:%s\n' "$name" "$x" "$gid" "$supps" # To avoid *cut*.
+  done < <(getent group)
+}
+
+print_primary_users() {
+  local target_gid="$1"
+  declare -gA GID_PRIMARY_USERS
+
+  # To avoid calling *getent passwd* for each group.
+  if (( ${#GID_PRIMARY_USERS[@]} == 0 )); then
+    local username uid gid
+    while IFS=':' read -r username _ uid gid _; do
+      if [[ -v GID_PRIMARY_USERS["$gid"] ]]; then
+        GID_PRIMARY_USERS["$gid"]+="$DELIMITER"
+      fi
+
+      if (( ID_OPT )); then
+        GID_PRIMARY_USERS["$gid"]+="$uid"
+      else
+        GID_PRIMARY_USERS["$gid"]+="$username"
+      fi
+    done < <(getent passwd)
+  fi
+
+  printf '%s' "${GID_PRIMARY_USERS[$target_gid]}"
+  if [[ -v GID_PRIMARY_USERS["$target_gid"] ]] || (( VERBOSE_OPT )); then
+    printf '\n'
+  fi
+}
+
+print_supplementary_users() {
+  local supps="$1"
+  if [[ -z "$supps" ]]; then
+    (( VERBOSE_OPT )) && printf '\n'
+    return
+  fi
+
+  if (( ID_OPT )); then
+    local sep='' username uid
+    while read -r username; do
+      uid=$(id -u "$username" 2>/dev/null) || continue   # In a clean system, this should never hit *continue*.
+      printf '%s%s' "$sep" "$uid"
+      sep="$DELIMITER"
+    done <<< "${supps//,/$'\n'}"
+  else
+    printf '%s' "${supps//,/$DELIMITER}"
+  fi
+  printf '\n'
+}
+
+# $1 is the GID, $2 is its supp members.
+verbose_group() {
+  print_primary_users "$1"
+  print_supplementary_users "$2"
+}
+
+all_groups() {
+  local sep='' groupname gid supps gname_or_gid
+
+  while IFS=':' read -r groupname _ gid supps; do
+    gname_or_gid="$groupname"
+    (( ID_OPT )) && gname_or_gid="$gid"
+
+    if (( VERBOSE_OPT )); then
+      printf '%s:\n' "$gname_or_gid"
+      verbose_group "$gid" "$supps"
+      printf -- '----------\n'
+    else
+      printf '%s%s' "$sep" "$gname_or_gid"
+      sep="$DELIMITER"
+    fi
+  done < <(generate_regular_group_lines)
+  (( ! VERBOSE_OPT )) && printf '\n'
+}
+
+empty_groups() {
+  local gid
+  local -A used_gids=()
+
+  # To avoid calling *getent passwd* for each group.
+  while IFS=':' read -r _ _ _ gid _; do
+    used_gids["$gid"]=1
+  done < <(getent passwd)
+
+  local sep='' found=0 groupname supps
+  while IFS=':' read -r groupname _ gid supps; do
+    [[ -n "$supps" ]]          && continue
+    [[ -v used_gids["$gid"] ]] && continue
+
+    found=1
+    if (( ID_OPT )); then
+      printf '%s%s' "$sep" "$gid"
+    else
+      printf '%s%s' "$sep" "$groupname"
+    fi
+    sep="$DELIMITER"
+  done < <(generate_regular_group_lines)
+  (( found )) && printf '\n'
+}
+
+# Only called in main(). $1 is group name or GID.
+get_gid_and_supps() {
+  local group_line
+  group_line="$(getent group "$1")" || return 2
+
+  local mingid maxgid gid supps
+  read -r mingid maxgid < <(get_min_max_gid)
+  IFS=':' read -r _ _ gid supps <<< "$group_line"
+  (( gid < mingid || gid > maxgid ))           && return 3
+
+  printf '%s %s\n' "$gid" "$supps"
+}
+
+main() {
+  local temp_args
+  temp_args="$(getopt -q -o vepsid: \
+      -l verbose,empty,primary,supplementary,id,delimiter:,help -- "$@")" || error 1
+  eval set -- "$temp_args"
+
+  VERBOSE_OPT=0
+  ID_OPT=0
+  DELIMITER=' '
+  local empty_opt=0 primary_opt=0 supplementary_opt=0
+  while :; do
+    case "$1" in
+      -v|--verbose)       VERBOSE_OPT=1;       shift    ;;
+      -e|--empty)         empty_opt=1;         shift    ;;
+      -p|--primary)       primary_opt=1;       shift    ;;
+      -s|--supplementary) supplementary_opt=1; shift    ;;
+      -i|--id)            ID_OPT=1;            shift    ;;
+      -d|--delimiter)     DELIMITER="$2";      shift  2 ;;
+      --help)             usage;               return 0 ;;
+      --) shift;                               break    ;;
+    esac
+  done
+
+  if (( $# == 0 )); then
+    (( primary_opt || supplementary_opt ))     && error 1
+    (( VERBOSE_OPT && empty_opt ))             && error 1
+
+    if (( empty_opt )); then
+      empty_groups
+    else
+      all_groups
+    fi
+    return
+
+  elif (( $# == 1 )); then
+    (( VERBOSE_OPT || empty_opt )) && error 1
+    (( primary_opt && supplementary_opt ))     && error 1
+
+    local out
+    out="$(get_gid_and_supps "$1")" || {
+      case $? in
+        2) error 2 "Group \"$1\" does not exist.\n" ;;
+        3) error 2 "Group \"$1\" exists but is not a regular group.\n" ;;
+      esac
+    }
+
+    local gid supps
+    read -r gid supps <<< "$out"
+
+    if (( primary_opt )); then
+      print_primary_users       "$gid"
+    elif (( supplementary_opt )); then
+      print_supplementary_users "$supps"
+    else
+      VERBOSE_OPT=1
+      verbose_group "$gid" "$supps"
+    fi
+    return
+
+  else
+    error 1
+  fi
+}
+
+main "$@"

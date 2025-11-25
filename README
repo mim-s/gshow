@@ -1,0 +1,26 @@
+Usage: gshow [OPTION]... [GROUP]
+Show information about regular groups.
+
+GROUP may be a group name or GID.
+
+With no GROUP, output all regular groups.
+
+With GROUP, output exactly two lines:
+  1. users whose primary group is GROUP
+  2. users with GROUP as a supplementary group
+
+Options:
+  -v, --verbose            show all regular groups in verbose format
+  -e, --empty              show regular groups with no members
+  -p, --primary            show users whose primary group is GROUP
+                           no output if there are none
+  -s, --supplementary      show users with GROUP as a supplementary group
+                           no output if there are none
+  -i, --id                 print IDs instead of names
+  -d, --delimiter=DELIM    set output delimiter (default: space)
+      --help               display this help and exit
+
+Exit status:
+  0     if OK,
+  1     if the syntax is not followed,
+  2     if GROUPNAME|GID does not exist or is not a regular group.
