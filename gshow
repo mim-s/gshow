@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 
 # Future me attention:
-#   There are exactly 4 global variables and they are in capitals:
-#   VERBOSE_OPT, ID_OPT, DELIMITER, GID_PRIMARY_USERS
+#   There are exactly 5 global variables and they are in capitals:
+#   VERBOSE_OPT, ID_OPT, DELIMITER, GID_PRIMARY_USERS, USERNAME_UID
 #   GID_PRIMARY_USERS is only used in print_primary_users().
+#   USERNAME_UID is only used in print_supplementary_users().
 #
 #   usage() and error() are only called in main().
 
@@ -107,11 +108,20 @@ print_supplementary_users() {
 
   if (( ID_OPT )); then
     local sep='' username uid
+    declare -gA USERNAME_UID
+
+    # To avoid calling *id -u* for every username
+    if (( ${#USERNAME_UID[@]} == 0 )); then
+      while IFS=':' read -r username _ uid _; do
+        USERNAME_UID["$username"]="$uid"
+      done < <(getent passwd)
+    fi
     while read -r username; do
-      uid=$(id -u "$username" 2>/dev/null) || continue   # In a clean system, this should never hit *continue*.
-      printf '%s%s' "$sep" "$uid"
+      [[ -v USERNAME_UID["$username"] ]] || continue    # In a clean system, *continue* should never happen.
+      printf '%s%s' "$sep" "${USERNAME_UID[$username]}"
       sep="$DELIMITER"
     done <<< "${supps//,/$'\n'}"
+
   else
     printf '%s' "${supps//,/$DELIMITER}"
   fi
@@ -205,8 +215,8 @@ main() {
   done
 
   if (( $# == 0 )); then
-    (( primary_opt || supplementary_opt ))     && error 1
-    (( VERBOSE_OPT && empty_opt ))             && error 1
+    (( primary_opt || supplementary_opt )) && error 1
+    (( VERBOSE_OPT && empty_opt ))         && error 1
 
     if (( empty_opt )); then
       empty_groups
@@ -216,8 +226,8 @@ main() {
     return
 
   elif (( $# == 1 )); then
-    (( VERBOSE_OPT || empty_opt )) && error 1
-    (( primary_opt && supplementary_opt ))     && error 1
+    (( VERBOSE_OPT || empty_opt ))         && error 1
+    (( primary_opt && supplementary_opt )) && error 1
 
     local out
     out="$(get_gid_and_supps "$1")" || {
@@ -231,7 +241,7 @@ main() {
     read -r gid supps <<< "$out"
 
     if (( primary_opt )); then
-      print_primary_users       "$gid"
+      print_primary_users "$gid"
     elif (( supplementary_opt )); then
       print_supplementary_users "$supps"
     else
