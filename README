@@ -12,6 +12,7 @@ With GROUP, output exactly two lines:
 Options:
   -v, --verbose            show all regular groups in verbose format
   -e, --empty              show regular groups with no members
+                           no output if there are none
   -p, --primary            show users whose primary group is GROUP
                            no output if there are none
   -s, --supplementary      show users with GROUP as a supplementary group
@@ -23,4 +24,4 @@ Options:
 Exit status:
   0     if OK,
   1     if the syntax is not followed,
-  2     if GROUP does not exist or is not a regular group.
+  2     if GROUP does not exist.
