@@ -25,6 +25,7 @@ With GROUP, output exactly two lines:
 Options:
   -v, --verbose            show all regular groups in verbose format
   -e, --empty              show regular groups with no members
+                           no output if there are none
   -p, --primary            show users whose primary group is GROUP
                            no output if there are none
   -s, --supplementary      show users with GROUP as a supplementary group
@@ -36,7 +37,7 @@ Options:
 Exit status:
   0     if OK,
   1     if the syntax is not followed,
-  2     if GROUP does not exist or is not a regular group.
+  2     if GROUP does not exist.
 EOF
 }
 
@@ -180,14 +181,10 @@ empty_groups() {
 
 # Only called in main(). $1 is group name or GID.
 get_gid_and_supps() {
-  local group_line
+  local group_line gid supps
   group_line="$(getent group "$1")" || return 2
 
-  local mingid maxgid gid supps
-  read -r mingid maxgid < <(get_min_max_gid)
   IFS=':' read -r _ _ gid supps <<< "$group_line"
-  (( gid < mingid || gid > maxgid ))           && return 3
-
   printf '%s %s\n' "$gid" "$supps"
 }
 
@@ -210,7 +207,7 @@ main() {
       -i|--id)            ID_OPT=1;            shift    ;;
       -d|--delimiter)     DELIMITER="$2";      shift  2 ;;
       --help)             usage;               return 0 ;;
-      --) shift;                               break    ;;
+      --)                 shift;               break    ;;
     esac
   done
 
@@ -230,12 +227,7 @@ main() {
     (( primary_opt && supplementary_opt )) && error 1
 
     local out
-    out="$(get_gid_and_supps "$1")" || {
-      case $? in
-        2) error 2 "Group \"$1\" does not exist.\n" ;;
-        3) error 2 "Group \"$1\" exists but is not a regular group.\n" ;;
-      esac
-    }
+    out="$(get_gid_and_supps "$1")"        || error 2 "Group \"$1\" does not exist.\n"
 
     local gid supps
     read -r gid supps <<< "$out"
