@@ -12,7 +12,7 @@
 usage() {
   cat << 'EOF'
 Usage: gshow [OPTION]... [GROUP]
-Show information about regular groups.
+Show information about groups.
 
 GROUP may be a group name or GID.
 
