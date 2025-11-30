@@ -17,7 +17,7 @@ Options:
                            no output if there are none
   -s, --supplementary      show users with GROUP as a supplementary group
                            no output if there are none
-  -i, --id                 print IDs instead of names
+  -i, --id                 also print UIDs/GIDs
   -d, --delimiter=DELIM    set output delimiter (default: space)
       --help               display this help and exit
 

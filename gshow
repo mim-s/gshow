@@ -30,7 +30,7 @@ Options:
                            no output if there are none
   -s, --supplementary      show users with GROUP as a supplementary group
                            no output if there are none
-  -i, --id                 print IDs instead of names
+  -i, --id                 also print UIDs/GIDs
   -d, --delimiter=DELIM    set output delimiter (default: space)
       --help               display this help and exit
 
@@ -86,11 +86,8 @@ print_primary_users() {
         GID_PRIMARY_USERS["$gid"]+="$DELIMITER"
       fi
 
-      if (( ID_OPT )); then
-        GID_PRIMARY_USERS["$gid"]+="$uid"
-      else
-        GID_PRIMARY_USERS["$gid"]+="$username"
-      fi
+      GID_PRIMARY_USERS["$gid"]+="$username"
+      (( ID_OPT )) && GID_PRIMARY_USERS["$gid"]+="($uid)"
     done < <(getent passwd)
   fi
 
@@ -119,7 +116,8 @@ print_supplementary_users() {
     fi
     while read -r username; do
       [[ -v USERNAME_UID["$username"] ]] || continue    # In a clean system, *continue* should never happen.
-      printf '%s%s' "$sep" "${USERNAME_UID[$username]}"
+
+      printf '%s%s(%s)' "$sep" "$username" "${USERNAME_UID[$username]}"
       sep="$DELIMITER"
     done <<< "${supps//,/$'\n'}"
 
@@ -136,18 +134,18 @@ verbose_group() {
 }
 
 all_groups() {
-  local sep='' groupname gid supps gname_or_gid
+  local sep='' groupname gid supps
 
   while IFS=':' read -r groupname _ gid supps; do
-    gname_or_gid="$groupname"
-    (( ID_OPT )) && gname_or_gid="$gid"
-
     if (( VERBOSE_OPT )); then
-      printf '%s:\n' "$gname_or_gid"
+      printf '%s' "$groupname"
+      (( ID_OPT )) && printf '(%s)' "$gid"
+      printf ':\n'
       verbose_group "$gid" "$supps"
       printf -- '----------\n'
     else
-      printf '%s%s' "$sep" "$gname_or_gid"
+      printf '%s%s' "$sep" "$groupname"
+      (( ID_OPT )) && printf '(%s)' "$gid"
       sep="$DELIMITER"
     fi
   done < <(generate_regular_group_lines)
@@ -169,11 +167,8 @@ empty_groups() {
     [[ -v used_gids["$gid"] ]] && continue
 
     found=1
-    if (( ID_OPT )); then
-      printf '%s%s' "$sep" "$gid"
-    else
-      printf '%s%s' "$sep" "$groupname"
-    fi
+    printf '%s%s' "$sep" "$groupname"
+    (( ID_OPT )) && printf '(%s)' "$gid"
     sep="$DELIMITER"
   done < <(generate_regular_group_lines)
   (( found )) && printf '\n'
