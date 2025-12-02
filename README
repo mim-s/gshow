@@ -13,9 +13,9 @@ Options:
   -v, --verbose            show all regular groups in verbose format
   -e, --empty              show regular groups with no members
                            no output if there are none
-  -p, --primary            show users whose primary group is GROUP
+  -p, --primary            only show users whose primary group is GROUP
                            no output if there are none
-  -s, --supplementary      show users with GROUP as a supplementary group
+  -s, --supplementary      only show users with GROUP as a supplementary group
                            no output if there are none
   -i, --id                 also print UIDs/GIDs
   -d, --delimiter=DELIM    set output delimiter (default: space)

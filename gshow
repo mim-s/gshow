@@ -1,12 +1,9 @@
 #!/usr/bin/env bash
 
-# Future me attention:
-#   There are exactly 5 global variables and they are in capitals:
-#   VERBOSE_OPT, ID_OPT, DELIMITER, GID_PRIMARY_USERS, USERNAME_UID
-#   GID_PRIMARY_USERS is only used in print_primary_users().
-#   USERNAME_UID is only used in print_supplementary_users().
+# There are exactly 5 global variables and they are in capitals:
+# VERBOSE_OPT, ID_OPT, DELIMITER, GID_PRIMARY_USERS, USERNAME_UID
 #
-#   usage() and error() are only called in main().
+# usage() and error() are only called in main().
 
 
 usage() {
@@ -26,9 +23,9 @@ Options:
   -v, --verbose            show all regular groups in verbose format
   -e, --empty              show regular groups with no members
                            no output if there are none
-  -p, --primary            show users whose primary group is GROUP
+  -p, --primary            only show users whose primary group is GROUP
                            no output if there are none
-  -s, --supplementary      show users with GROUP as a supplementary group
+  -s, --supplementary      only show users with GROUP as a supplementary group
                            no output if there are none
   -i, --id                 also print UIDs/GIDs
   -d, --delimiter=DELIM    set output delimiter (default: space)
@@ -49,8 +46,9 @@ error() {
   exit "$status"
 }
 
-get_min_max_gid() {
-  local mingid maxgid key value
+generate_regular_group_lines() {
+  local mingid maxgid key value name x gid supps
+
   while read -r key value _; do
     case "$key" in
       GID_MIN) mingid="$value" ;;
@@ -60,13 +58,6 @@ get_min_max_gid() {
 
   mingid="${mingid:-1000}"
   maxgid="${maxgid:-60000}"
-
-  printf '%s %s\n' "$mingid" "$maxgid"
-}
-
-generate_regular_group_lines() {
-  local mingid maxgid name x gid supps
-  read -r mingid maxgid < <(get_min_max_gid)
 
   while IFS=':' read -r name x gid supps; do
     (( gid < mingid || gid > maxgid )) && continue
@@ -186,7 +177,7 @@ get_gid_and_supps() {
 main() {
   local temp_args
   temp_args="$(getopt -q -o vepsid: \
-      -l verbose,empty,primary,supplementary,id,delimiter:,help -- "$@")" || error 1
+    -l verbose,empty,primary,supplementary,id,delimiter:,help -- "$@")" || error 1
   eval set -- "$temp_args"
 
   VERBOSE_OPT=0
@@ -215,7 +206,7 @@ main() {
     else
       all_groups
     fi
-    return
+    return 0
 
   elif (( $# == 1 )); then
     (( VERBOSE_OPT || empty_opt ))         && error 1
@@ -235,7 +226,7 @@ main() {
       VERBOSE_OPT=1
       verbose_group "$gid" "$supps"
     fi
-    return
+    return 0
 
   else
     error 1
